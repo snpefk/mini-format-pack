@@ -49,7 +49,7 @@ def outdent(editor):
 
 
 def formatBlockPre(editor):
-    editor.web.eval("setFormat('formatBlock', 'pre')")
+    editor.web.eval("setFormat('code')")
 
 
 def insertHorizontalRule(editor):
