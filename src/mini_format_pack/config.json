@@ -12,6 +12,12 @@
             "custom": true
         },
         {
+            "name": "onChangeBgCol",
+            "tooltip": "Change highlight color",
+            "hotkey": "ctrl+shift+n",
+            "label": "▼"
+        },
+        {
             "name": "formatBlockPre",
             "tooltip": "Insert code block",
             "hotkey": "ctrl+."

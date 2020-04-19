@@ -12,6 +12,8 @@ License: GNU AGPLv3 <https://www.gnu.org/licenses/agpl.html>
 """
 
 
+import json
+import re
 from aqt import mw
 from aqt.qt import *
 from anki.hooks import addHook
@@ -48,8 +50,100 @@ def outdent(editor):
     editor.web.eval("setFormat('outdent')")
 
 
+def __escape_html_chars(text):
+    """
+    This code was taken from Mini Format Pack Supplementary add-on and modified 
+    https://ankiweb.net/shared/info/476705431
+    """
+    html_escape_table = {
+        "&": "&amp;",
+        '"': "&quot;",
+        "'": "&apos;",
+        ">": "&gt;",
+        "<": "&lt;",
+        "\n": "<br>"
+    }
+
+    return "".join(html_escape_table.get(c, c) for c in text)
+
+
 def formatBlockPre(editor):
-    editor.web.eval("setFormat('code')")
+    """
+    This code was taken from Mini Format Pack Supplementary add-on and modified 
+    https://ankiweb.net/shared/info/476705431
+    """
+    selected_text = editor.web.selectedText()
+
+    if not selected_text:
+        return
+
+    tag_begin = "<code>"
+    tag_end = "</code>"
+
+    html = editor.note.fields[editor.currentField]
+
+    if "<li><br /></li>" in html:
+        # an empty list means trouble, because somehow Anki will also make the
+        # line in which we want to put a <code> tag a list if we continue
+        replacement = tag_begin + selected_text + tag_end
+        editor.web.eval("document.execCommand('insertHTML', false, %s);"
+                        % json.dumps(replacement))
+
+        editor.web.setFocus()
+        field = editor.currentField
+        editor.web.eval(f"focusField({field});")
+        editor.saveNow(lambda: editor.note.fields[field] != html)
+
+    # Due to a bug in Anki or BeautifulSoup, we cannot use a simple
+    # wrap operation like with <a>. So this is a very hackish way of making
+    # sure that a <code> tag may precede or follow a <div> and that the tag
+    # won't eat the character immediately preceding or following it
+    pattern = "@%*!"
+    len_p = len(pattern)
+
+    # first, wrap the selection up in a pattern that the user is unlikely
+    # to use in its own cards
+    editor.web.eval(f"wrap('{pattern}', '{pattern[::-1]}')")
+
+    # focus the field, so that changes are saved
+    # this causes the cursor to go to the end of the field
+    editor.web.setFocus()
+    field = editor.currentField
+    editor.web.eval(f"focusField({field});")
+
+    def cb1():
+        html = editor.note.fields[field]
+        begin = html.find(pattern)
+        end = html.find(pattern[::-1], begin)
+
+        if re.match("<pre[^<]+?@%\*!", html):
+            html = re.sub("<pre[^<]+?@%\*!",
+                          "<pre class='myCodeClass'>@%*!", html)
+            html = html.replace("!*%@<br>", "!*%@")
+            html = html.replace(pattern, "")
+            html = html.replace(pattern[::-1], "")
+        else:
+            html = html.replace("!*%@<br>", "!*%@")
+            html = (html[:begin] + tag_begin + selected_text + tag_end +
+                    html[end + len_p:])
+       
+        # delete the current HTML and replace it by our new & improved one
+        editor.note.fields[field] = html
+
+        # reload the note: this is needed on OS X, because it will otherwise
+        # falsely show that the formatting of the element at the start of
+        # the HTML has spread across the entire note
+        editor.loadNote()
+
+        # focus the field, so that changes are saved
+        editor.web.setFocus()
+        editor.web.eval("focusField(%d);" % field)
+    editor.saveNow(cb1)
+
+    def cb2():
+        editor.web.setFocus()
+        editor.web.eval("focusField(%d);" % field)
+    editor.saveNow(cb2)
 
 
 def insertHorizontalRule(editor):
